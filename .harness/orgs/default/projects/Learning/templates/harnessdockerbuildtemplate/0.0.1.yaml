@@ -1,0 +1,145 @@
+template:
+  name: harness-docker-build-template
+  type: Pipeline
+  projectIdentifier: Learning
+  orgIdentifier: default
+  spec:
+    properties:
+      ci:
+        codebase:
+          connectorRef: GitHub_devahariharan
+          repoName: harness-docker-build
+          build: <+input>
+    stages:
+      - stage:
+          name: build and push
+          identifier: build_and_push
+          description: ""
+          type: CI
+          spec:
+            cloneCodebase: true
+            caching:
+              enabled: true
+              override: true
+            buildIntelligence:
+              enabled: true
+            platform:
+              os: Linux
+              arch: Amd64
+            runtime:
+              type: Cloud
+              spec: {}
+            execution:
+              steps:
+                - step:
+                    type: Run
+                    name: install-and-test
+                    identifier: installandtest
+                    spec:
+                      connectorRef: docker_hub
+                      image: node:22-alpine
+                      shell: Sh
+                      command: |-
+                        echo "Installing dependencies..."
+                        npm install
+                        echo "${IMAGE_REPO}/${IMAGE_NAME}"
+                        echo "Running tests..."
+                        npm test
+      - stage:
+          name: push-image
+          identifier: pushimage
+          description: ""
+          type: CI
+          spec:
+            cloneCodebase: true
+            caching:
+              enabled: true
+              override: true
+            buildIntelligence:
+              enabled: true
+            platform:
+              os: Linux
+              arch: Amd64
+            runtime:
+              type: Cloud
+              spec: {}
+            execution:
+              steps:
+                - step:
+                    type: BuildAndPushDockerRegistry
+                    name: Push to github
+                    identifier: Push_to_github
+                    spec:
+                      connectorRef: GitHub_Container_Registry
+                      repo: <+pipeline.variables.IMAGE_REPO>/<+pipeline.variables.IMAGE_NAME>
+                      tags:
+                        - latest
+                        - <+codebase.shortCommitSha>
+                        - build-<+pipeline.sequenceId>
+                      dockerfile: docker/Dockerfile
+                      context: docker/
+      - stage:
+          name: Security scan
+          identifier: Security_scan
+          description: ""
+          type: CI
+          spec:
+            cloneCodebase: false
+            caching:
+              enabled: true
+              override: true
+            buildIntelligence:
+              enabled: true
+            platform:
+              os: Linux
+              arch: Amd64
+            runtime:
+              type: Cloud
+              spec: {}
+            execution:
+              steps:
+                - step:
+                    type: AquaTrivy
+                    name: trivy scan
+                    identifier: trivy_scan
+                    spec:
+                      mode: orchestration
+                      config: default
+                      target:
+                        type: container
+                        detection: auto
+                      advanced:
+                        log:
+                          level: info
+                        fail_on_severity: critical
+                      privileged: true
+                      image:
+                        type: docker_v2
+                        tag: <+codebase.shortCommitSha>
+                        access_id: <+secrets.getValue("Personal_GitHub_Username")>
+                        access_token: <+secrets.getValue("Personal_GitHub_PAT")>
+                        name: <+pipeline.variables.IMAGE_REPO_NAME>/<+pipeline.variables.IMAGE_NAME>
+                        domain: ghcr.io
+    variables:
+      - name: IMAGE_REPO
+        type: String
+        description: Image_registry/repository
+        required: false
+        value: ghcr.io/devahariharan
+      - name: IMAGE_NAME
+        type: String
+        description: ""
+        required: false
+        value: harness-practice
+      - name: IMAGE_REGISTRY
+        type: String
+        description: ""
+        required: false
+        value: ghcr.io
+      - name: IMAGE_REPO_NAME
+        type: String
+        description: ""
+        required: false
+        value: devahariharan
+  identifier: harnessdockerbuildtemplate
+  versionLabel: 0.0.1
